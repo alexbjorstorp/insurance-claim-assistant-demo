@@ -1,0 +1,18 @@
+[phases.setup]
+nixPkgs = ["python311", "nodejs_20"]
+
+[phases.install]
+cmds = [
+  "pip install -r backend/requirements.txt",
+  "cd frontend && npm ci"
+]
+
+[phases.build]
+cmds = [
+  "cd frontend && VITE_DEMO_MODE=true npx vite build",
+  "mkdir -p backend/static",
+  "cp -r frontend/dist/. backend/static/"
+]
+
+[start]
+cmd = "cd backend && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
