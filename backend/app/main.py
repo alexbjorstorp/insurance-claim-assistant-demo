@@ -69,7 +69,10 @@ if _static_dir:
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
-        """Catch-all that serves the React SPA for any non-API path."""
+        """Serve static files when they exist, otherwise serve the React SPA."""
+        file_path = os.path.join(_static_dir, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
         return FileResponse(os.path.join(_static_dir, "index.html"))
 
 
