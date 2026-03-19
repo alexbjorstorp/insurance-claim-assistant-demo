@@ -14,7 +14,7 @@ from app.core.security import get_password_hash
 from app.models.user import User, UserRole
 from app.models.case import Case, CaseStatus, Priority, SLARisk
 from app.models.signal import Signal, SignalCategory, SignalSeverity
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -80,170 +80,239 @@ def create_demo_users(db: Session):
 
 
 def create_demo_cases(db: Session, handler_user: User):
-    """Create demo cases."""
+    """Create 5 demo cases, each triggering a different uitgelicht rule."""
     today = date.today()
-    
-    cases_data = [
-        {
-            "case_number": "CLM-2026-001",
-            "claim_number": "CLAIM-001",
-            "policy_number": "POL-12345",
-            "status": CaseStatus.in_progress,
-            "priority": Priority.high,
-            "sla_risk": SLARisk.medium,
-            "incident_date": today - timedelta(days=15),
-            "report_date": today - timedelta(days=10),
-            "due_date": today + timedelta(days=5),
-            "assigned_to_id": handler_user.id,
-            "claimant_name": "John Smith",
-            "claimant_contact": "john.smith@email.com",
-            "description": "Vehicle collision claim with property damage",
-            "category": "Auto",
-            "subcategory": "Collision",
-            "claim_amount": 15000.00,
-            "estimated_reserve": 18000.00,
-            "source": "manual_entry"
-        },
-        {
-            "case_number": "CLM-2026-002",
-            "claim_number": "CLAIM-002",
-            "policy_number": "POL-67890",
-            "status": CaseStatus.new,
-            "priority": Priority.critical,
-            "sla_risk": SLARisk.high,
-            "incident_date": today - timedelta(days=3),
-            "report_date": today - timedelta(days=2),
-            "due_date": today + timedelta(days=3),
-            "claimant_name": "Jane Doe",
-            "claimant_contact": "jane.doe@email.com",
-            "description": "Major property damage from fire",
-            "category": "Property",
-            "subcategory": "Fire",
-            "claim_amount": 75000.00,
-            "estimated_reserve": 80000.00,
-            "source": "manual_entry"
-        },
-        {
-            "case_number": "CLM-2026-003",
-            "claim_number": "CLAIM-003",
-            "policy_number": "POL-11111",
-            "status": CaseStatus.pending_review,
-            "priority": Priority.medium,
-            "sla_risk": SLARisk.low,
-            "incident_date": today - timedelta(days=30),
-            "report_date": today - timedelta(days=28),
-            "due_date": today + timedelta(days=15),
-            "assigned_to_id": handler_user.id,
-            "claimant_name": "Bob Johnson",
-            "claimant_contact": "bob.johnson@email.com",
-            "description": "Minor injury claim from slip and fall",
-            "category": "Liability",
-            "subcategory": "Bodily Injury",
-            "claim_amount": 5000.00,
-            "estimated_reserve": 6000.00,
-            "source": "manual_entry"
-        }
+
+    # Each tuple: (case_data, signal_creator_fn)
+    cases_with_signals = [
+        # ── Rule 5: VSO binnengekomen ────────────────────────────────────────
+        (
+            {
+                "case_number": "CLM-2026-001",
+                "claim_number": "CLAIM-001",
+                "policy_number": "POL-12345",
+                "status": CaseStatus.in_progress,
+                "priority": Priority.critical,
+                "sla_risk": SLARisk.high,
+                "incident_date": today - timedelta(days=5),
+                "report_date": today - timedelta(days=3),
+                "due_date": today + timedelta(days=3),
+                "assigned_to_id": handler_user.id,
+                "claimant_name": "Peter van Dijk",
+                "claimant_contact": "p.vandijk@email.com",
+                "description": "Ernstig verkeersongeval, verzekerde heeft VSO aangeboden",
+                "category": "Auto",
+                "subcategory": "Aanrijding",
+                "claim_amount": 85000.00,
+                "estimated_reserve": 90000.00,
+                "source": "manual_entry",
+            },
+            _signals_vso,
+        ),
+        # ── Rule 4: Inactief dossier ─────────────────────────────────────────
+        (
+            {
+                "case_number": "CLM-2026-002",
+                "claim_number": "CLAIM-002",
+                "policy_number": "POL-67890",
+                "status": CaseStatus.in_progress,
+                "priority": Priority.medium,
+                "sla_risk": SLARisk.medium,
+                "incident_date": today - timedelta(days=90),
+                "report_date": today - timedelta(days=88),
+                "due_date": today + timedelta(days=20),
+                "assigned_to_id": handler_user.id,
+                "claimant_name": "Maria Jansen",
+                "claimant_contact": "m.jansen@email.com",
+                "description": "Brandschade aan woning, al langere tijd geen voortgang",
+                "category": "Opstal",
+                "subcategory": "Brand",
+                "claim_amount": 42000.00,
+                "estimated_reserve": 45000.00,
+                "source": "manual_entry",
+            },
+            _signals_inactief,
+        ),
+        # ── Rule 3: Medisch advies (hoge impact) ─────────────────────────────
+        (
+            {
+                "case_number": "CLM-2026-003",
+                "claim_number": "CLAIM-003",
+                "policy_number": "POL-11111",
+                "status": CaseStatus.pending_review,
+                "priority": Priority.high,
+                "sla_risk": SLARisk.medium,
+                "incident_date": today - timedelta(days=45),
+                "report_date": today - timedelta(days=42),
+                "due_date": today + timedelta(days=10),
+                "assigned_to_id": handler_user.id,
+                "claimant_name": "Thomas de Groot",
+                "claimant_contact": "t.degroot@email.com",
+                "description": "Letselschade na val op het werk, medisch rapport vereist",
+                "category": "Aansprakelijkheid",
+                "subcategory": "Letsel",
+                "claim_amount": 28000.00,
+                "estimated_reserve": 32000.00,
+                "source": "manual_entry",
+            },
+            _signals_medisch,
+        ),
+        # ── Rule 2: Deadline overschreden ────────────────────────────────────
+        (
+            {
+                "case_number": "CLM-2026-004",
+                "claim_number": "CLAIM-004",
+                "policy_number": "POL-22222",
+                "status": CaseStatus.in_progress,
+                "priority": Priority.high,
+                "sla_risk": SLARisk.high,
+                "incident_date": today - timedelta(days=60),
+                "report_date": today - timedelta(days=58),
+                "due_date": today + timedelta(days=2),
+                "assigned_to_id": handler_user.id,
+                "claimant_name": "Sophie Bakker",
+                "claimant_contact": "s.bakker@email.com",
+                "description": "Waterschade na lekkage, signalen al lang open",
+                "category": "Opstal",
+                "subcategory": "Waterschade",
+                "claim_amount": 19000.00,
+                "estimated_reserve": 22000.00,
+                "source": "manual_entry",
+            },
+            _signals_deadline,
+        ),
+        # ── Rule 1: Veel openstaande signalen ────────────────────────────────
+        (
+            {
+                "case_number": "CLM-2026-005",
+                "claim_number": "CLAIM-005",
+                "policy_number": "POL-33333",
+                "status": CaseStatus.new,
+                "priority": Priority.medium,
+                "sla_risk": SLARisk.low,
+                "incident_date": today - timedelta(days=10),
+                "report_date": today - timedelta(days=8),
+                "due_date": today + timedelta(days=30),
+                "assigned_to_id": handler_user.id,
+                "claimant_name": "Lars Visser",
+                "claimant_contact": "l.visser@email.com",
+                "description": "Inbraakschade aan bedrijfspand, meerdere acties uitstaand",
+                "category": "Inboedel",
+                "subcategory": "Inbraak",
+                "claim_amount": 11000.00,
+                "estimated_reserve": 13000.00,
+                "source": "manual_entry",
+            },
+            _signals_veel,
+        ),
     ]
-    
+
     created_cases = []
-    for case_data in cases_data:
-        # Check if case exists
+    for case_data, signal_fn in cases_with_signals:
         existing = db.query(Case).filter(Case.case_number == case_data["case_number"]).first()
         if existing:
             logger.info(f"Case {case_data['case_number']} already exists")
             created_cases.append(existing)
             continue
-        
+
         case = Case(**case_data)
         db.add(case)
-        db.flush()  # Get ID
+        db.flush()
+        signal_fn(db, case)
         created_cases.append(case)
         logger.info(f"Created case: {case_data['case_number']}")
-        
-        # Add signals for each case
-        create_demo_signals(db, case)
-    
+
     db.commit()
     return created_cases
 
 
-def create_demo_signals(db: Session, case: Case):
-    """Create demo signals for a case.
+# ── Signal creators — one per uitgelicht rule ─────────────────────────────────
 
-    Each case gets at least 3 unresolved signals so they all qualify as
-    'uitgelicht' (Rule 1: >= 3 open signals).  One case also gets a VSO
-    signal and one gets a medisch-advies signal so the other uitgelicht
-    rules are represented in the demo.
-    """
-    signals = []
+def _signals_vso(db: Session, case: Case):
+    """Rule 5: VSO binnengekomen."""
+    _add(db, case, SignalCategory.proces, SignalSeverity.critical,
+         "VSO binnengekomen – beoordeling vereist",
+         "Vaststellingsovereenkomst ontvangen, goedkeuring directie vereist.")
+    _add(db, case, SignalCategory.taken, SignalSeverity.warning,
+         "Juridische toetsing VSO vereist",
+         "Concept VSO moet worden getoetst door juridische afdeling.")
+    _add(db, case, SignalCategory.communicatie, SignalSeverity.info,
+         "Verzekerde wacht op reactie",
+         "Verzekerde heeft aangegeven binnen 5 dagen reactie te verwachten.")
 
-    # ── Signals shared by every case (guarantees Rule 1: >= 3 open signals) ──
-    signals.append(Signal(
+
+def _signals_inactief(db: Session, case: Case):
+    """Rule 4: Inactief dossier."""
+    _add(db, case, SignalCategory.proces, SignalSeverity.error,
+         "Inactief dossier – geen voortgang geboekt",
+         "Al 60 dagen geen activiteit op dit dossier.")
+    _add(db, case, SignalCategory.taken, SignalSeverity.warning,
+         "Opvolging vereist bij inactief dossier",
+         "Dossier moet worden opgepakt en voortgang vastgelegd.")
+    _add(db, case, SignalCategory.communicatie, SignalSeverity.warning,
+         "Geen contact met verzekerde",
+         "Laatste contact meer dan 30 dagen geleden.")
+
+
+def _signals_medisch(db: Session, case: Case):
+    """Rule 3: Medisch advies (hoge impact)."""
+    _add(db, case, SignalCategory.taken, SignalSeverity.critical,
+         "Medisch advies vereist",
+         "Letselrapport ontbreekt; medisch advies noodzakelijk voor verdere behandeling.")
+    _add(db, case, SignalCategory.proces, SignalSeverity.warning,
+         "Behandeling geblokkeerd op medisch advies",
+         "Dossier kan niet worden afgerond zonder medische beoordeling.")
+    _add(db, case, SignalCategory.communicatie, SignalSeverity.info,
+         "Medisch specialist geraadpleegd",
+         "Afspraak met specialist staat gepland.")
+
+
+def _signals_deadline(db: Session, case: Case):
+    """Rule 2: Signal past deadline (> 30 days old)."""
+    old_date = datetime.now() - timedelta(days=45)
+    _add(db, case, SignalCategory.taken, SignalSeverity.error,
+         "Actie vereist – reactietermijn overschreden",
+         "Reactietermijn is al 45 dagen geleden verstreken.",
+         created_at=old_date)
+    _add(db, case, SignalCategory.proces, SignalSeverity.warning,
+         "Dossierbehandeling vertraagd",
+         "Vertraging in dossierbehandeling vereist directe opvolging.")
+    _add(db, case, SignalCategory.communicatie, SignalSeverity.info,
+         "Rappel verstuurd aan verzekerde",
+         "Tweede rappel verstuurd, nog geen reactie ontvangen.")
+
+
+def _signals_veel(db: Session, case: Case):
+    """Rule 1: >= 3 open signals."""
+    _add(db, case, SignalCategory.taken, SignalSeverity.warning,
+         "Offerte herstelwerkzaamheden ontbreekt",
+         "Offerte van aannemer nog niet ontvangen.")
+    _add(db, case, SignalCategory.datakwaliteit, SignalSeverity.warning,
+         "Polisinformatie onvolledig",
+         "Dekking kan niet worden vastgesteld door ontbrekende polisgegevens.")
+    _add(db, case, SignalCategory.communicatie, SignalSeverity.info,
+         "Getuigenverklaring uitstaand",
+         "Verklaring van getuige is aangevraagd maar nog niet ontvangen.")
+    _add(db, case, SignalCategory.financieel, SignalSeverity.info,
+         "Eigen risico nog niet verrekend",
+         "Eigen risico dient te worden verrekend bij schadeafwikkeling.")
+
+
+def _add(db: Session, case: Case, category, severity, title: str,
+         description: str, created_at=None):
+    """Helper to add a single unresolved signal."""
+    signal = Signal(
         case_id=case.id,
-        category=SignalCategory.proces,
-        severity=SignalSeverity.warning,
-        title="SLA deadline nadert",
-        description="Dossier nadert de SLA-deadline en vereist opvolging.",
+        category=category,
+        severity=severity,
+        title=title,
+        description=description,
         is_resolved=False,
-        source="system"
-    ))
-    signals.append(Signal(
-        case_id=case.id,
-        category=SignalCategory.taken,
-        severity=SignalSeverity.warning,
-        title="Aanvullende informatie vereist",
-        description="Er ontbreekt nog informatie om het dossier af te ronden.",
-        is_resolved=False,
-        source="system"
-    ))
-    signals.append(Signal(
-        case_id=case.id,
-        category=SignalCategory.communicatie,
-        severity=SignalSeverity.info,
-        title="Contact met verzekerde uitstaand",
-        description="Nog geen bevestiging ontvangen van verzekerde.",
-        is_resolved=False,
-        source="system"
-    ))
-
-    # ── Case-specific extra signals for richer demo variety ──────────────────
-    if case.priority == Priority.critical:
-        signals.append(Signal(
-            case_id=case.id,
-            category=SignalCategory.proces,
-            severity=SignalSeverity.critical,
-            title="VSO binnengekomen – beoordeling vereist",
-            description="Vaststellingsovereenkomst ontvangen en wacht op goedkeuring.",
-            is_resolved=False,
-            source="system"
-        ))
-
-    if case.claim_amount and case.claim_amount > 50000:
-        signals.append(Signal(
-            case_id=case.id,
-            category=SignalCategory.financieel,
-            severity=SignalSeverity.warning,
-            title="Medisch advies vereist bij hoge schadelast",
-            description=f"Schadelast €{case.claim_amount:,.2f} overschrijdt drempel; medisch advies aanbevolen.",
-            is_resolved=False,
-            source="system"
-        ))
-
-    if case.sla_risk == SLARisk.high:
-        signals.append(Signal(
-            case_id=case.id,
-            category=SignalCategory.taken,
-            severity=SignalSeverity.error,
-            title="SLA-risico hoog",
-            description="Dossier heeft een hoog SLA-risico en vereist directe actie.",
-            is_resolved=False,
-            source="system"
-        ))
-
-    for signal in signals:
-        db.add(signal)
-
-    logger.info(f"Created {len(signals)} signals for case {case.case_number}")
+        source="system",
+    )
+    if created_at:
+        signal.created_at = created_at
+    db.add(signal)
 
 
 def main():
