@@ -26,21 +26,16 @@ interface AuthProviderProps {
 
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
-const DEMO_USER: User = {
-  id: 1,
-  username: 'demo',
-  email: 'demo@insurance.com',
-  full_name: 'Demo User',
-  role: 'admin',
-  is_active: true,
-};
-
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(DEMO_MODE ? DEMO_USER : null);
-  const [isLoading, setIsLoading] = useState(!DEMO_MODE);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (DEMO_MODE) return;
+    if (DEMO_MODE) {
+      // In demo mode fetch the real user from the backend (no token needed)
+      fetchCurrentUser();
+      return;
+    }
     // Check if user is already logged in
     const token = localStorage.getItem('access_token');
     if (token) {
