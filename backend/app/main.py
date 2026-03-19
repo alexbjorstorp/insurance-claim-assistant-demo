@@ -99,6 +99,9 @@ async def startup_event():
                 logger.info("Empty database — seeding demo data...")
                 from app.scripts.seed_data import main as seed_main
                 seed_main()
+                logger.info("Demo data seeded successfully.")
+        except Exception as seed_err:
+            logger.error(f"Failed to seed demo data: {seed_err}", exc_info=True)
         finally:
             db.close()
 

@@ -168,52 +168,81 @@ def create_demo_cases(db: Session, handler_user: User):
 
 
 def create_demo_signals(db: Session, case: Case):
-    """Create demo signals for a case."""
+    """Create demo signals for a case.
+
+    Each case gets at least 3 unresolved signals so they all qualify as
+    'uitgelicht' (Rule 1: >= 3 open signals).  One case also gets a VSO
+    signal and one gets a medisch-advies signal so the other uitgelicht
+    rules are represented in the demo.
+    """
     signals = []
-    
+
+    # ── Signals shared by every case (guarantees Rule 1: >= 3 open signals) ──
+    signals.append(Signal(
+        case_id=case.id,
+        category=SignalCategory.proces,
+        severity=SignalSeverity.warning,
+        title="SLA deadline nadert",
+        description="Dossier nadert de SLA-deadline en vereist opvolging.",
+        is_resolved=False,
+        source="system"
+    ))
+    signals.append(Signal(
+        case_id=case.id,
+        category=SignalCategory.taken,
+        severity=SignalSeverity.warning,
+        title="Aanvullende informatie vereist",
+        description="Er ontbreekt nog informatie om het dossier af te ronden.",
+        is_resolved=False,
+        source="system"
+    ))
+    signals.append(Signal(
+        case_id=case.id,
+        category=SignalCategory.communicatie,
+        severity=SignalSeverity.info,
+        title="Contact met verzekerde uitstaand",
+        description="Nog geen bevestiging ontvangen van verzekerde.",
+        is_resolved=False,
+        source="system"
+    ))
+
+    # ── Case-specific extra signals for richer demo variety ──────────────────
     if case.priority == Priority.critical:
         signals.append(Signal(
             case_id=case.id,
-            category=SignalCategory.process,
+            category=SignalCategory.proces,
             severity=SignalSeverity.critical,
-            title="High priority case requires immediate attention",
-            description="Case marked as critical priority",
+            title="VSO binnengekomen – beoordeling vereist",
+            description="Vaststellingsovereenkomst ontvangen en wacht op goedkeuring.",
+            is_resolved=False,
             source="system"
         ))
-    
-    if case.sla_risk in [SLARisk.high, SLARisk.medium]:
-        signals.append(Signal(
-            case_id=case.id,
-            category=SignalCategory.tasks,
-            severity=SignalSeverity.warning if case.sla_risk == SLARisk.medium else SignalSeverity.error,
-            title=f"SLA at risk: {case.sla_risk.value}",
-            description="Case approaching SLA deadline",
-            source="system"
-        ))
-    
+
     if case.claim_amount and case.claim_amount > 50000:
         signals.append(Signal(
             case_id=case.id,
-            category=SignalCategory.financial,
+            category=SignalCategory.financieel,
             severity=SignalSeverity.warning,
-            title="High value claim",
-            description=f"Claim amount exceeds threshold: ${case.claim_amount:,.2f}",
+            title="Medisch advies vereist bij hoge schadelast",
+            description=f"Schadelast €{case.claim_amount:,.2f} overschrijdt drempel; medisch advies aanbevolen.",
+            is_resolved=False,
             source="system"
         ))
-    
-    if not case.assigned_to_id:
+
+    if case.sla_risk == SLARisk.high:
         signals.append(Signal(
             case_id=case.id,
-            category=SignalCategory.process,
-            severity=SignalSeverity.info,
-            title="Case not assigned",
-            description="Case needs to be assigned to a handler",
+            category=SignalCategory.taken,
+            severity=SignalSeverity.error,
+            title="SLA-risico hoog",
+            description="Dossier heeft een hoog SLA-risico en vereist directe actie.",
+            is_resolved=False,
             source="system"
         ))
-    
+
     for signal in signals:
         db.add(signal)
-    
+
     logger.info(f"Created {len(signals)} signals for case {case.case_number}")
 
 
