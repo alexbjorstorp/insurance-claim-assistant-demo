@@ -37,8 +37,15 @@ def _wait_and_open_browser():
 
 
 if __name__ == "__main__":
-    threading.Thread(target=_wait_and_open_browser, daemon=True).start()
+    try:
+        threading.Thread(target=_wait_and_open_browser, daemon=True).start()
 
-    from app.main import app
-    import uvicorn
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+        from app.main import app
+        import uvicorn
+        uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    except Exception as e:
+        import traceback
+        print("\n--- ERROR ---")
+        traceback.print_exc()
+        print("\nPress Enter to close...")
+        input()
