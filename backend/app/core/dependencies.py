@@ -16,8 +16,10 @@ async def get_current_user(
 ) -> User:
     """Get the current authenticated user."""
     if settings.DEMO_MODE:
-        # In demo mode return the first admin user without any token validation
-        user = db.query(User).filter(User.is_active == True).first()
+        # In demo mode return the designated demo user without any token validation
+        user = db.query(User).filter(User.username == "mjong", User.is_active == True).first()
+        if not user:
+            user = db.query(User).filter(User.is_active == True).first()
         if user:
             return user
 

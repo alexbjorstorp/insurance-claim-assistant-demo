@@ -39,6 +39,13 @@ def create_demo_users(db: Session):
             "role": UserRole.handler
         },
         {
+            "email": "mjong@insurance.com",
+            "username": "mjong",
+            "password": "mjong123",
+            "full_name": "Marco de Jong",
+            "role": UserRole.handler
+        },
+        {
             "email": "viewer@insurance.com",
             "username": "viewer",
             "password": "viewer123",
@@ -220,9 +227,9 @@ def main():
         logger.info("Creating demo users...")
         users = create_demo_users(db)
         
-        # Create cases
+        # Create cases — assign to Marco de Jong for demo
         logger.info("Creating demo cases...")
-        handler = users.get("handler")
+        handler = users.get("mjong")
         if handler:
             cases = create_demo_cases(db, handler)
         
